@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Picky Logo](./picky_logo.png)
+<img src="./picky_logo.png" width="100" />
 
 **사용자의 브라우징 패턴을 실시간으로 분석하여 관심사에 맞는 뉴스와 지식을 똑똑하게 추천하는 AI 기반 개인화 플랫폼**
 
