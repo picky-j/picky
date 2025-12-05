@@ -18,6 +18,9 @@ transformers>=4.41.0,<5.0.0
 sentencepiece>=0.1.99
 safetensors>=0.4.0
 
+# 임베딩 모델 (Sentence Transformers)
+sentence-transformers>=2.2.0
+
 # 유틸리티
 requests>=2.31.0
 beautifulsoup4==4.12.3
