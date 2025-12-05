@@ -1,65 +1,91 @@
 """
 공통 임베딩 모델 로직
-GMS API를 활용한 벡터화
+OpenAI API 또는 Sentence Transformers를 활용한 벡터화
 """
 
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
+import asyncio
+import numpy as np
 
-import httpx
 
 logger = logging.getLogger(__name__)
+
+# Sentence Transformers는 선택적 import
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    SentenceTransformer = None
 
 
 class EmbeddingService:
     """공통 임베딩 서비스 - 모든 도메인에서 사용"""
 
-    def __init__(self, api_endpoint: str = "https://gms.ssafy.io/gmsapi/"):
-        self.api_endpoint = api_endpoint
-        self.api_key = os.getenv("GMS_KEY")
+    def __init__(self):
+        # Sentence Transformers 로컬 모델 사용
+        # Hugging Face에서 모델을 다운로드하여 로컬에서 실행 (API 아님)
+        
+        self.embedding_model_name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
         self.executor = ThreadPoolExecutor(max_workers=4)
+        self.local_model = None
+        
         self._validate_config()
+        self._initialize_model()
 
     def _validate_config(self):
-        """GMS API 설정 검증"""
-        if not self.api_key:
-            raise RuntimeError("GMS_KEY 환경변수가 설정되지 않았습니다.")
+        """임베딩 설정 검증"""
+        if not SENTENCE_TRANSFORMERS_AVAILABLE:
+            raise RuntimeError(
+                "Sentence Transformers가 설치되지 않았습니다.\n"
+                "설치: pip install sentence-transformers"
+            )
+        logger.info(f"[임베딩] Sentence Transformers 사용 모드 (모델: {self.embedding_model_name})")
 
-        logger.info(f"[GMS API] 엔드포인트: {self.api_endpoint}")
-        logger.info("[GMS API] 설정 완료!")
+    def _initialize_model(self):
+        """로컬 모델 초기화"""
+        if SENTENCE_TRANSFORMERS_AVAILABLE:
+            try:
+                logger.info(f"[임베딩] 모델 로딩 중: {self.embedding_model_name}")
+                self.local_model = SentenceTransformer(self.embedding_model_name)
+                logger.info("[임베딩] 모델 로딩 완료!")
+            except Exception as e:
+                raise RuntimeError(f"모델 로딩 실패: {e}")
 
+    async def _encode_local(self, texts: List[str]) -> List[List[float]]:
+        """Sentence Transformers를 사용한 벡터화 (로컬)"""
+        if not self.local_model:
+            raise RuntimeError("로컬 모델이 초기화되지 않았습니다.")
+        
+        # ThreadPoolExecutor를 사용하여 동기 함수를 비동기로 실행
+        loop = asyncio.get_running_loop()
 
-    async def _encode_async(self, texts: List[str]) -> List[List[float]]:
-        """비동기식 텍스트 벡터화 (GMS API 사용)"""
-        if not self.api_key:
-            raise RuntimeError("GMS API 키가 설정되지 않았습니다.")
-
-        async with httpx.AsyncClient() as client:
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-
-            payload = {
-                "input": texts,
-                "model": "text-embedding-3-small"  # GMS에서 지원하는 모델명
-            }
-
-            response = await client.post(
-                f"{self.api_endpoint}api.openai.com/v1/embeddings",
-                headers=headers,
-                json=payload,
-                timeout=30.0
+        def _run_encode():
+            # Sentence Transformers는 2D numpy array를 반환
+            return self.local_model.encode(
+                texts,
+                convert_to_numpy=True,  # numpy array로 변환
+                show_progress_bar=False
             )
 
-            if response.status_code != 200:
-                raise RuntimeError(f"GMS API 호출 실패: {response.status_code} - {response.text}")
+        embeddings = await loop.run_in_executor(
+            self.executor,
+            _run_encode
+        )
+        
+        # numpy 2D 배열을 리스트의 리스트로 변환
+        if isinstance(embeddings, np.ndarray):
+            return embeddings.tolist()
+        else:
+            # 이미 리스트인 경우
+            return [emb.tolist() if hasattr(emb, 'tolist') else list(emb) for emb in embeddings]
 
-            result = response.json()
-            embeddings = [item["embedding"] for item in result["data"]]
-            return embeddings
+    async def _encode_async(self, texts: List[str]) -> List[List[float]]:
+        """비동기식 텍스트 벡터화 (Sentence Transformers 로컬 모델 사용)"""
+        return await self._encode_local(texts)
 
     async def encode(self, text: str) -> List[float]:
         """단일 텍스트를 벡터로 변환"""

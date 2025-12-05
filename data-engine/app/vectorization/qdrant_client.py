@@ -3,6 +3,7 @@ Qdrant 벡터 데이터베이스 클라이언트
 벡터 저장 및 검색 기능
 """
 
+import os
 from datetime import datetime
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -17,6 +18,14 @@ class QdrantService:
             host=settings.QDRANT_HOST,
             port=settings.QDRANT_PORT
         )
+        # 사용 중인 임베딩 모델명 가져오기
+        self.embedding_model = self._get_embedding_model_name()
+    
+    def _get_embedding_model_name(self) -> str:
+        """현재 사용 중인 임베딩 모델명 반환"""
+        embedding_model = os.getenv("EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+        # 모델명에서 경로 제거 (예: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2" -> "paraphrase-multilingual-MiniLM-L12-v2")
+        return embedding_model.split("/")[-1]
     
     def create_collection_if_not_exists(self, collection_name: str, vector_size: int):
         """컬렉션이 없으면 생성"""
@@ -92,7 +101,7 @@ class QdrantService:
             payload = {
                 **metadata,
                 "created_at": datetime.utcnow().isoformat(),
-                "embedding_model": "gms-text-embedding-3-small",
+                "embedding_model": self.embedding_model,
                 "collection": collection_name
             }
             
@@ -146,7 +155,7 @@ class QdrantService:
             "timestamp_formatted": data.get("timestampFormatted"),
         }
     
-    async def save_vectors_with_metadata_and_ids(self, collection_name: str, vectors: list[list[float]], metadatas: list[dict], point_ids: list[str]):
+    async def save_vectors_with_metadata_and_ids(self, collection_name: str, vectors: list[list[float]], metadatas: list[dict], point_ids: list):
         """특정 ID로 벡터를 메타데이터와 함께 Qdrant에 저장"""
         print(f"\n[진행중] 벡터를 Qdrant에 저장 중... (컬렉션: {collection_name}, ID 지정)")
 
@@ -162,17 +171,31 @@ class QdrantService:
 
         # 벡터 및 메타데이터 업로드
         points = []
-        for vector, metadata, point_id in zip(vectors, metadatas, point_ids):
+        for i, (vector, metadata, point_id) in enumerate(zip(vectors, metadatas, point_ids)):
+            # 벡터가 리스트인지 확인 및 변환
+            if not isinstance(vector, list):
+                if hasattr(vector, 'tolist'):
+                    vector = vector.tolist()
+                else:
+                    vector = list(vector)
+            
+            # 벡터의 각 요소가 숫자인지 확인
+            if vector and isinstance(vector[0], (dict, list, tuple)):
+                raise ValueError(f"벡터 {i}가 올바른 형식이 아닙니다. 첫 번째 요소 타입: {type(vector[0])}")
+            
             # 공통 메타데이터 추가
             payload = {
                 **metadata,
                 "created_at": datetime.utcnow().isoformat(),
-                "embedding_model": "gms-text-embedding-3-small",  # 모델명 업데이트
+                "embedding_model": self.embedding_model,  # 동적 모델명
                 "collection": collection_name
             }
 
+            # Qdrant는 정수 또는 문자열 ID를 받음
+            point_id_final = point_id if isinstance(point_id, (int, str)) else str(point_id)
+            
             point = models.PointStruct(
-                id=point_id,  # 사용자 지정 ID 사용
+                id=point_id_final,  # 사용자 지정 ID 사용
                 vector=vector,
                 payload=payload
             )
