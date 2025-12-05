@@ -61,7 +61,7 @@ class EmbeddingService:
             raise RuntimeError("로컬 모델이 초기화되지 않았습니다.")
         
         # ThreadPoolExecutor를 사용하여 동기 함수를 비동기로 실행
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _run_encode():
             # Sentence Transformers는 2D numpy array를 반환
