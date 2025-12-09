@@ -1,21 +1,21 @@
 ---
-name: Bug report
-about: Create a report to help us improve
-title: "[BUG]"
-labels: bug
+name: Refactor template
+about: Refactoring code
+title: "[REFACTOR]"
+labels: refactor
 assignees: ''
 
 ---
 
-## 🐞 Bug Description  
-버그에 대한 간단한 설명을 작성해주세요.
+## 🐞 Refactor Description  
+리팩토링에 대한 간단한 설명을 작성해주세요.
 ex) Android 환경에서 어플리케이션 접속 후 로그인 시 에러가 발생합니다.
 
-## ✅ Expected Behavior  
-기대했던 동작을 간단히 설명해주세요.
+## ✅ Changed Func  
+변화된 사항을 간단히 설명해주세요.
 
 ## 🔁 Reproduce  
-버그를 재현하기 위한 과정을 작성해주세요.
+향상된 성능을 작성해주세요.
 1. ...
 2. ...
 
