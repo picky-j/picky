@@ -12,7 +12,8 @@ class Settings:
     # MongoDB 설정
     MONGODB_URL: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
     # Redis 설정 
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/1")
+    _redis_url = os.getenv("REDIS_URL", "").strip()
+    REDIS_URL: str = _redis_url if _redis_url and _redis_url.startswith("redis://") else "redis://redis:6379/1"
     
     # GMS 설정 (벡터화용)
     GMS_KEY: str = os.getenv("GMS_KEY", "")
