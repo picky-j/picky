@@ -15,6 +15,8 @@ from recommend_news import NewsRecommendationService
 from app.core.mysql_db import SessionLocal
 from app.users.models import User
 from sqlalchemy import text
+from app.user_logs.profile_service import UserProfileService
+from app.core.dependencies import get_profile_service
 
 class NewsRecommendationSender:
     """Java 백엔드로 추천 뉴스 전송 서비스"""
@@ -72,7 +74,7 @@ class NewsRecommendationSender:
             # 2. 더 많은 뉴스를 검색 (중복 제거 위해 여유분 확보)
             search_limit = 500  # 500개 검색
 
-            # 3. 뉴스 추천 (이메일로 벡터 조회)
+            # 3. 뉴스 추천 (이메일로 벡터 조회 - 내부에서 캐싱 사용)
             all_recommended_news = await self.recommendation_service.recommend_news_by_user_id(
                 user_id=user_email,
                 limit=search_limit
@@ -113,7 +115,7 @@ class NewsRecommendationSender:
 
             print(f"🔍 전체 {len(all_recommended_news)}개 → 중복 제거 후 {len(filtered_news)}개 → 최종 {len(recommended_news)}개 선택")
 
-            # 3. Java 백엔드로 전송
+            # 7. Java 백엔드로 전송
             success_count = 0
             base_time = datetime.now()
 
@@ -256,14 +258,9 @@ async def main():
         print("💡 Java 백엔드를 먼저 실행해주세요.")
         return 1
 
-    # 추천 뉴스 가져와서 전송
+    # 전체 사용자 처리
     try:
-        await sender.get_and_send_recommendations(
-            user_id="dummy-user@picky.com",
-            backend_user_id=1,
-            limit=20
-        )
-
+        await sender.process_all_users()
         print("\n✅ 모든 작업이 성공적으로 완료되었습니다!")
         return 0
 
@@ -272,19 +269,4 @@ async def main():
         return 1
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="추천 뉴스를 Java 백엔드로 전송")
-    parser.add_argument("--user-id", default="dummy-user@picky.com", help="사용자 ID (기본값: dummy-user@picky.com)")
-    parser.add_argument("--backend-user-id", type=int, default=1, help="백엔드 사용자 ID (기본값: 1)")
-    parser.add_argument("--limit", type=int, default=20, help="추천할 뉴스 개수 (기본값: 20)")
-    parser.add_argument("--backend-url", default="http://backend:8080", help="Java 백엔드 URL")
-
-    args = parser.parse_args()
-
-    # 백엔드 URL 설정
-    sender = NewsRecommendationSender(args.backend_url)
-
-    # 실행
-    exit_code = asyncio.run(main())
-    sys.exit(exit_code)
+    asyncio.run(main())
