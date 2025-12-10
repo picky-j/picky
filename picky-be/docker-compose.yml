@@ -63,6 +63,8 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - picky-network
 
@@ -88,6 +90,9 @@ volumes:
   mongo_data:
     external: true
     name: picky-be_mongo_data
+  redis_data:
+    external: true
+    name: picky-be_redis_data
 
 networks:
   picky-network:

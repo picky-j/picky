@@ -11,6 +11,8 @@ load_dotenv()
 class Settings:
     # MongoDB 설정
     MONGODB_URL: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    # Redis 설정 
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/1")
     
     # GMS 설정 (벡터화용)
     GMS_KEY: str = os.getenv("GMS_KEY", "")
