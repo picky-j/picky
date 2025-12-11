@@ -15,6 +15,9 @@ from recommend_quiz import QuizRecommendationService
 from app.core.mysql_db import SessionLocal
 from app.users.models import User
 from sqlalchemy import text
+from app.user_logs.profile_service import UserProfileService
+from app.core.dependencies import get_profile_service
+
 
 class QuizRecommendationSender:
     """Java 백엔드로 추천 퀴즈 전송 서비스"""
@@ -71,7 +74,7 @@ class QuizRecommendationSender:
             # 2. 더 많은 퀴즈를 검색 (중복 제거 위해 여유분 확보)
             search_limit = 500  # 500개 검색
 
-            # 3. 퀴즈 추천 (이메일로 벡터 조회)
+            # 3. 퀴즈 추천 (이메일로 벡터 조회 - 내부에서 캐싱 사용)
             all_recommended_quizzes = await self.recommendation_service.recommend_quizzes_by_user_id(
                 user_id=user_email,
                 limit=search_limit

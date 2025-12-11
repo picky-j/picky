@@ -31,3 +31,6 @@ sqlalchemy>=2.0.0
 
 # Scheduler
 APScheduler==3.10.4
+
+# Redis 캐싱
+redis>=5.0.0

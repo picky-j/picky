@@ -8,10 +8,11 @@ import hashlib
 import logging
 import numpy as np
 import uuid
-from typing import Dict, List
+from typing import Dict, List, Optional
 from ..core.database import get_database, get_collection_name, get_url_hash
 from ..vectorization.embeddings import embedding_service
 from ..vectorization.qdrant_client import QdrantService
+from ..core.redis_client import redis_cache
 
 logger = logging.getLogger(__name__)
 
@@ -382,6 +383,73 @@ class UserProfileService:
             logger.error(f"[에러] user_profiles 저장 실패: {e}")
             raise
 
+    async def get_user_profile_vector_cached(self, user_id: str) -> Optional[Dict]:
+        """
+        사용자 프로필 벡터 조회 (Redis 캐싱 포함)
+        
+        Args:
+            user_id: 사용자 ID (이메일)
+        
+        Returns:
+            프로필 정보 (vector, metadata) 또는 None
+        """
+        cache_key = f"user:profile:vector:{user_id}"
+        
+        # 1. Redis 캐시 확인
+        try:
+            cached = await redis_cache.get(cache_key)
+            if cached:
+                logger.info(f"[캐시 히트] 사용자 프로필 벡터: {user_id}")
+                return cached
+        except Exception as e:
+            logger.warning(f"[캐시 조회 실패] {user_id}: {e}")
+        
+        # 2. 캐시 미스 - Qdrant에서 조회
+        logger.info(f"[캐시 미스] Qdrant에서 프로필 벡터 조회: {user_id}")
+        
+        try:
+            profile_point_id = self._get_deterministic_profile_id(user_id)
+            existing_profile = await self.qdrant_service.get_point("user_profiles", profile_point_id)
+            
+            if existing_profile and existing_profile.get("vector"):
+                result = {
+                    "vector": existing_profile.get("vector"),
+                    "metadata": {
+                        "point_id": profile_point_id,
+                        "weight_sum": existing_profile.get("payload", {}).get("weight_sum"),
+                        "log_count": existing_profile.get("payload", {}).get("log_count"),
+                        "created_from": existing_profile.get("payload", {}).get("created_from")
+                    }
+                }
+                
+                # 3. Redis에 캐시 저장 (TTL: 1시간)
+                try:
+                    await redis_cache.set(cache_key, result, ttl=3600)
+                    logger.info(f"[캐시 저장] 사용자 프로필 벡터: {user_id}")
+                except Exception as e:
+                    logger.warning(f"[캐시 저장 실패] {user_id}: {e}")
+                
+                return result
+            else:
+                logger.info(f"[프로필 없음] 사용자 프로필이 존재하지 않음: {user_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[프로필 조회 실패] {user_id}: {e}")
+            return None
+
+    async def invalidate_user_profile_cache(self, user_id: str):
+        """
+        사용자 프로필 캐시 무효화
+        프로필이 업데이트될 때 호출
+        """
+        cache_key = f"user:profile:vector:{user_id}"
+        try:
+            await redis_cache.delete(cache_key)
+            logger.info(f"[캐시 무효화] 사용자 프로필: {user_id}")
+        except Exception as e:
+            logger.warning(f"[캐시 무효화 실패] {user_id}: {e}")
+
     async def update_profile_with_new_log(self, user_id: str, new_data: Dict) -> Dict:
         """새로운 브라우징 로그로 프로필 증분 업데이트 (GPT_recommend.md 공식)"""
         # 사용자별 Lock 생성 및 적용
@@ -494,6 +562,9 @@ class UserProfileService:
                     logger.warning(f"[경고] 카테고리 분류 실패: {e}")
 
                 logger.info(f"[완료] 프로필 증분 업데이트 완료 - 새 가중치: {W_old + w_new}")
+
+                # 무효화 추가
+                await self.invalidate_user_profile_cache(user_id)
 
                 return {
                     "success": True,

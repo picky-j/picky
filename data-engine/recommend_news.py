@@ -17,6 +17,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from app.vectorization.qdrant_client import QdrantService
 from app.core.mysql_db import SessionLocal
 from app.news.models import News
+from app.user_logs.profile_service import UserProfileService
+from app.core.dependencies import get_profile_service
 
 class NewsRecommendationService:
     """뉴스 추천 서비스"""
@@ -27,7 +29,7 @@ class NewsRecommendationService:
         self.user_collection = "user_profiles"  # 사용자 벡터 컬렉션
 
     async def get_user_vector(self, user_id: str) -> Optional[List[float]]:
-        """사용자 ID로부터 프로필 벡터 조회
+        """사용자 ID로부터 프로필 벡터 조회 (Redis 캐싱 포함)
 
         Args:
             user_id: 사용자 ID
@@ -35,21 +37,21 @@ class NewsRecommendationService:
         Returns:
             사용자 프로필 벡터 또는 None
         """
-
         try:
             print(f"👤 사용자 벡터 조회 중: {user_id}")
 
-            # Qdrant에서 사용자 벡터 검색 (메타데이터에서 user_id로 찾기)
-            user_profile = await self.qdrant_service.get_user_profile(
-                collection_name=self.user_collection,
-                user_id=user_id
-            )
+            # 프로필 서비스 가져오기
+            profile_service = get_profile_service()
 
-            if user_profile and user_profile.get('vector'):
-                print(f"✅ 사용자 벡터 발견: {len(user_profile['vector'])}차원")
-                return list(user_profile['vector'])
+            # 캐싱된 프로필 벡터 조회
+            profile_data = await profile_service.get_user_profile_vector_cached(user_id)
+
+            if profile_data and profile_data.get("vector"):
+                vector = profile_data["vector"]
+                print(f"✅ 사용자 벡터 발견: {len(vector)}차원")
+                return list(vector)
             else:
-                print(f"❌ 사용자 벡터를 찾을 수 없음: {user_id}")
+                print(f"❌ 사용자 {user_id}의 벡터를 찾을 수 없습니다.")
                 return None
 
         except Exception as e:
